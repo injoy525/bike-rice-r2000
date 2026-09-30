@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bike Rush - Racing Game</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#fff;overflow:hidden;user-select:none}
+#gameContainer{position:relative;width:100vw;height:100vh;overflow:hidden;background:#111}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;top:18px;left:50%;transform:translateX(-50%);width:min(94%,850px);display:flex;justify-content:space-between;gap:10px;z-index:5;pointer-events:none}
+.hudBox{min-width:115px;padding:10px 16px;border-radius:12px;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.18);text-align:center;backdrop-filter:blur(8px)}
+.hudLabel{display:block;font-size:11px;color:#bbb;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px}
+.hudValue{font-size:20px;font-weight:bold}
+.screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.75));z-index:10}
+.panel{width:min(92%,520px);padding:38px 30px;border-radius:24px;text-align:center;background:rgba(20,20,20,.9);border:1px solid rgba(255,255,255,.15);box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.logo{font-size:clamp(42px,8vw,70px);font-weight:900;font-style:italic;letter-spacing:-3px;color:#ff3b30;text-shadow:4px 4px 0 #8c120c}
+.subtitle{margin-top:5px;color:#ddd;font-size:16px}
+.bikeEmoji{font-size:70px;margin:20px 0}
+.instructions{margin:20px auto;padding:15px;border-radius:12px;background:rgba(255,255,255,.06);color:#ddd;line-height:1.7;font-size:14px}
+button{border:none;cursor:pointer;color:white;font-weight:bold;border-radius:12px;transition:transform .15s,filter .15s}
+button:hover{filter:brightness(1.15);transform:scale(1.03)}
+#startBtn,#restartBtn{padding:15px 45px;font-size:18px;background:#ff3b30;box-shadow:0 8px 25px rgba(255,59,48,.3)}
+#pauseBtn{position:absolute;top:20px;right:20px;z-index:6;padding:10px 16px;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.2)}
+#gameOverScreen,#pauseOverlay{display:none}
+.gameOverTitle{font-size:42px;color:#ff3b30;margin-bottom:12px}
+.finalScore{font-size:25px;margin:12px 0 25px}
+.newRecord{color:#ffd60a;font-weight:bold;margin-bottom:15px;display:none}
+#mobileControls{position:absolute;bottom:25px;left:50%;transform:translateX(-50%);display:flex;gap:25px;z-index:7}
+.controlBtn{width:75px;height:65px;border-radius:18px;background:rgba(0,0,0,.55);border:2px solid rgba(255,255,255,.25);color:#fff;font-size:28px;touch-action:none}
+.controlBtn:active{transform:scale(.9);background:rgba(255,59,48,.7)}
+#pauseOverlay h2{font-size:48px;margin-bottom:15px}
+@media (min-width:800px){#mobileControls{display:none}}
+@media (max-width:600px){
+#hud{top:10px}.hudBox{min-width:0;flex:1;padding:8px 5px}.hudValue{font-size:16px}.hudLabel{font-size:9px}
+#pauseBtn{top:90px;right:10px}
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+<canvas id="gameCanvas"></canvas>
+
+<div id="hud">
+<div class="hudBox"><span class="hudLabel">Score</span><span class="hudValue" id="score">0</span></div>
+<div class="hudBox"><span class="hudLabel">Speed</span><span class="hudValue"><span id="speed">0</span> km/h</span></div>
+<div class="hudBox"><span class="hudLabel">Coins</span><span class="hudValue">🪙 <span id="coins">0</span></span></div>
+<div class="hudBox"><span class="hudLabel">Best</span><span class="hudValue" id="best">0</span></div>
+</div>
+
+<button id="pauseBtn">Ⅱ Pause</button>
+
+<div class="screen" id="startScreen">
+<div class="panel">
+<div class="logo">BIKE RUSH</div>
+<div class="subtitle">HIGH-SPEED STREET RACING</div>
+<div class="bikeEmoji">🏍️</div>
+<div class="instructions">
+<strong>HOW TO PLAY</strong><br>
+⬅️ Left Arrow / A — Move Left<br>
+➡️ Right Arrow / D — Move Right<br>
+⏸️ P — Pause Game<br>
+🪙 Collect coins and avoid traffic!
+</div>
+<button id="startBtn">START RACE</button>
+</div>
+</div>
+
+<div class="screen" id="gameOverScreen">
+<div class="panel">
+<div class="gameOverTitle">RACE OVER</div>
+<div class="bikeEmoji">💥</div>
+<div class="newRecord" id="newRecord">🏆 NEW RECORD!</div>
+<div class="finalScore">Score: <strong id="finalScore">0</strong></div>
+<div class="instructions">
+Coins Collected: <strong id="finalCoins">0</strong><br>
+Distance: <strong id="finalDistance">0</strong> m
+</div>
+<button id="restartBtn">RACE AGAIN</button>
+</div>
+</div>
+
+<div class="screen" id="pauseOverlay">
+<div class="panel">
+<h2>GAME PAUSED</h2>
+<p style="color:#bbb;margin-bottom:25px">Press P or the button below to continue.</p>
+<button id="resumeBtn" style="padding:15px 45px;font-size:18px;background:#ff3b30">RESUME</button>
+</div>
+</div>
+
+<div id="mobileControls">
+<button class="controlBtn" id="leftBtn">◀</button>
+<button class="controlBtn" id="rightBtn">▶</button>
+</div>
+</div>
+
+<script>
+const canvas=document.getElementById("gameCanvas"),ctx=canvas.getContext("2d");
+let W=innerWidth,H=innerHeight;
+function resizeCanvas(){
+ W=innerWidth;H=innerHeight;
+ const dpr=Math.min(devicePixelRatio||1,2);
+ canvas.width=W*dpr;canvas.height=H*dpr;
+ canvas.style.width=W+"px";canvas.style.height=H+"px";
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener("resize",resizeCanvas);resizeCanvas();
+
+let gameRunning=false,paused=false,score=0,coins=0,distance=0;
+let bestScore=Number(localStorage.getItem("bikeRushBest")||0);
+let roadOffset=0,spawnTimer=0,coinTimer=0,lastTime=0,speed=7,maxSpeed=18;
+const road={width:430,lanes:4};
+const player={lane:1,x:0,targetX:0,y:0,width:48,height:85,color:"#e63946"};
+let enemies=[],coinObjects=[];
+const enemyColors=["#2472ff","#ffd60a","#9b5de5","#00c853","#ff6d00","#00b8d4"];
+
+function getRoadWidth(){return Math.min(road.width,W*.75)}
+function getRoadLeft(){return(W-getRoadWidth())/2}
+function getLaneWidth(){return getRoadWidth()/road.lanes}
+function getLaneCenter(lane){return getRoadLeft()+lane*getLaneWidth()+getLaneWidth()/2}
+function resetPlayer(){player.lane=1;player.x=getLaneCenter(1);player.targetX=player.x;player.y=H-145}
+
+function moveLeft(){if(gameRunning&&!paused&&player.lane>0){player.lane--;player.targetX=getLaneCenter(player.lane)}}
+function moveRight(){if(gameRunning&&!paused&&player.lane<road.lanes-1){player.lane++;player.targetX=getLaneCenter(player.lane)}}
+
+addEventListener("keydown",e=>{
+ if(e.code==="ArrowLeft"||e.code==="KeyA"){if(!e.repeat)moveLeft()}
+ if(e.code==="ArrowRight"||e.code==="KeyD"){if(!e.repeat)moveRight()}
+ if(e.code==="KeyP"||e.code==="Space"){if(gameRunning)togglePause()}
+});
+
+function spawnEnemy(){
+ let lane=Math.floor(Math.random()*road.lanes);
+ if(Math.random()<.45&&lane===player.lane)lane=(lane+1+Math.floor(Math.random()*(road.lanes-1)))%road.lanes;
+ enemies.push({lane,x:getLaneCenter(lane),y:-110,width:48,height:82,speed:speed*(.7+Math.random()*.35),color:enemyColors[Math.floor(Math.random()*enemyColors.length)],wobble:Math.random()*Math.PI*2});
+}
+function spawnCoin(){
+ const lane=Math.floor(Math.random()*road.lanes);
+ coinObjects.push({lane,x:getLaneCenter(lane),y:-30,radius:13,rotation:0});
+}
+
+function startGame(){
+ gameRunning=true;paused=false;score=0;coins=0;distance=0;speed=7;
+ enemies=[];coinObjects=[];resetPlayer();
+ document.getElementById("startScreen").style.display="none";
+ document.getElementById("gameOverScreen").style.display="none";
+ document.getElementById("pauseOverlay").style.display="none";
+ lastTime=performance.now();requestAnimationFrame(gameLoop);
+}
+function endGame(){
+ gameRunning=false;
+ const isNew=score>bestScore;
+ if(isNew){bestScore=score;localStorage.setItem("bikeRushBest",bestScore)}
+ document.getElementById("finalScore").textContent=score;
+ document.getElementById("finalCoins").textContent=coins;
+ document.getElementById("finalDistance").textContent=Math.floor(distance);
+ document.getElementById("newRecord").style.display=isNew?"block":"none";
+ document.getElementById("gameOverScreen").style.display="flex";
+ updateHUD();
+}
+function togglePause(){
+ if(!gameRunning)return;
+ paused=!paused;
+ document.getElementById("pauseOverlay").style.display=paused?"flex":"none";
+ if(!paused){lastTime=performance.now();requestAnimationFrame(gameLoop)}
+}
+
+document.getElementById("startBtn").onclick=startGame;
+document.getElementById("restartBtn").onclick=startGame;
+document.getElementById("pauseBtn").onclick=togglePause;
+document.getElementById("resumeBtn").onclick=togglePause;
+
+function mobileButton(id,fn){
+ const b=document.getElementById(id);
+ b.addEventListener("touchstart",e=>{e.preventDefault();fn()},{passive:false});
+ b.addEventListener("mousedown",e=>{e.preventDefault();fn()});
+}
+mobileButton("leftBtn",moveLeft);mobileButton("rightBtn",moveRight);
+
+function drawBackground(){
+ const g=ctx.createLinearGradient(0,0,0,H);
+ g.addColorStop(0,"#78c6ff");g.addColorStop(.45,"#c7ecff");g.addColorStop(1,"#72b84b");
+ ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+ ctx.fillStyle="#5c8f55";
+ ctx.beginPath();ctx.moveTo(0,H*.3);ctx.lineTo(W*.18,H*.17);ctx.lineTo(W*.32,H*.3);ctx.lineTo(W*.48,H*.14);ctx.lineTo(W*.68,H*.3);ctx.lineTo(W*.83,H*.18);ctx.lineTo(W,H*.3);ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
+ ctx.fillStyle="#4f9d45";ctx.fillRect(0,H*.3,W,H);
+ drawRoad();
+}
+function drawRoad(){
+ const left=getRoadLeft(),rw=getRoadWidth();
+ ctx.fillStyle="#333";ctx.fillRect(left,0,rw,H);
+ ctx.fillStyle="#eee";ctx.fillRect(left,0,7,H);ctx.fillRect(left+rw-7,0,7,H);
+ const sh=45,gap=45,off=(roadOffset*1.8)%(sh+gap);
+ for(let y=-sh+off;y<H;y+=sh+gap){
+  ctx.fillStyle="#e63946";ctx.fillRect(left-7,y,7,sh);ctx.fillRect(left+rw,y,7,sh);
+ }
+ ctx.setLineDash([45,45]);ctx.lineDashOffset=-roadOffset*2;
+ ctx.strokeStyle="rgba(255,255,255,.75)";ctx.lineWidth=5;
+ for(let i=1;i<road.lanes;i++){const x=left+i*(rw/road.lanes);ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}
+ ctx.setLineDash([]);
+}
+
+function drawBike(x,y,color,isPlayer){
+ ctx.save();ctx.translate(x,y);
+ ctx.fillStyle="rgba(0,0,0,.35)";ctx.beginPath();ctx.ellipse(0,36,27,8,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle="#111";ctx.beginPath();ctx.arc(0,-28,11,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(0,28,11,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle="#aaa";ctx.lineWidth=2;ctx.beginPath();ctx.arc(0,-28,6,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(0,28,6,0,Math.PI*2);ctx.stroke();
+ ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(-9,-27);ctx.lineTo(9,-27);ctx.lineTo(16,-5);ctx.lineTo(11,22);ctx.lineTo(-11,22);ctx.lineTo(-16,-5);ctx.closePath();ctx.fill();
+ ctx.fillStyle=isPlayer?"#ff6b61":color;ctx.beginPath();ctx.roundRect(-13,-17,26,28,7);ctx.fill();
+ ctx.fillStyle="#151515";ctx.fillRect(-10,7,20,8);
+ ctx.strokeStyle="#222";ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(-15,-27);ctx.lineTo(15,-27);ctx.stroke();
+ ctx.fillStyle="#fff8b0";ctx.beginPath();ctx.arc(0,-27,5,0,Math.PI*2);ctx.fill();
+ if(isPlayer){ctx.shadowColor="#ff3b30";ctx.shadowBlur=20;ctx.fillStyle="rgba(255,59,48,.2)";ctx.beginPath();ctx.arc(0,0,28,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0}
+ ctx.restore();
+}
+function drawCoin(c){
+ ctx.save();ctx.translate(c.x,c.y);c.rotation+=.08;const s=Math.abs(Math.cos(c.rotation));ctx.scale(Math.max(s,.15),1);
+ ctx.fillStyle="#ffd60a";ctx.beginPath();ctx.arc(0,0,c.radius,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle="#b88600";ctx.lineWidth=3;ctx.stroke();
+ ctx.fillStyle="#fff1a6";ctx.font="bold 13px Arial";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("$",0,1);ctx.restore();
+}
+function collides(a,b){
+ return a.x-a.width/2<b.x+b.width/2&&a.x+a.width/2>b.x-b.width/2&&a.y-a.height/2<b.y+b.height/2&&a.y+a.height/2>b.y-b.height/2;
+}
+
+function update(delta){
+ speed=Math.min(maxSpeed,speed+delta*.00018);
+ roadOffset+=speed*delta*.12;
+ distance+=speed*delta*.012;
+ score+=Math.floor(speed*delta*.004);
+ player.x+=(player.targetX-player.x)*Math.min(1,delta*.012);
+
+ spawnTimer+=delta;
+ if(spawnTimer>Math.max(420,1100-speed*35)){spawnEnemy();spawnTimer=0}
+ coinTimer+=delta;
+ if(coinTimer>800){spawnCoin();coinTimer=0}
+
+ for(let i=enemies.length-1;i>=0;i--){
+  const e=enemies[i];e.y+=(speed*.13+e.speed*.04)*delta;e.wobble+=delta*.003;e.x=getLaneCenter(e.lane)+Math.sin(e.wobble)*2;
+  if(e.y>H+120){enemies.splice(i,1);continue}
+  if(collides({x:player.x,y:player.y,width:player.width,height:player.height},e)){endGame();return}
+ }
+ for(let i=coinObjects.length-1;i>=0;i--){
+  const c=coinObjects[i];c.y+=speed*.13*delta;
+  if(c.y>H+50){coinObjects.splice(i,1);continue}
+  const dx=player.x-c.x,dy=player.y-c.y;
+  if(Math.sqrt(dx*dx+dy*dy)<40){coins++;score+=100;coinObjects.splice(i,1)}
+ }
+ updateHUD();
+}
+function updateHUD(){
+ document.getElementById("score").textContent=score;
+ document.getElementById("speed").textContent=Math.floor(speed*12);
+ document.getElementById("coins").textContent=coins;
+ document.getElementById("best").textContent=bestScore;
+}
+function draw(){
+ ctx.clearRect(0,0,W,H);drawBackground();
+ coinObjects.forEach(drawCoin);
+ enemies.forEach(e=>drawBike(e.x,e.y,e.color,false));
+ drawBike(player.x,player.y,player.color,true);
+ if(speed>13){
+  ctx.strokeStyle="rgba(255,255,255,.2)";ctx.lineWidth=2;
+  for(let i=0;i<12;i++){const x=Math.random()*W,y=Math.random()*H;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+35);ctx.stroke()}
+ }
+}
+function gameLoop(t){
+ if(!gameRunning||paused)return;
+ const delta=Math.min(t-lastTime,40);lastTime=t;
+ update(delta);draw();
+ if(gameRunning&&!paused)requestAnimationFrame(gameLoop);
+}
+resetPlayer();updateHUD();drawBackground();drawBike(W/2,H-145,"#e63946",true);
+</script>
+</body>
+</html>
